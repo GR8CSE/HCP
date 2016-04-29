@@ -3,9 +3,21 @@
 """ RESTful API using Flask"""
 
 from flask import Flask, jsonify, make_response, request, current_app, json
-from datetime import timedelta  
+from datetime import timedelta, datetime  
 from functools import update_wrapper
+import sqlite3
 
+# Connect to the local database
+conn = sqlite3.connect('HCP_DB.db')
+c = conn.cursor()
+#c.execute("""DROP TABLE entrys""")
+try:
+    c.execute("""CREATE TABLE logdata
+                (ID INTEGER PRIMARY KEY AUTOINCREMENT, sensorID integer, sensorValue text, date text)""")
+    print "DB Created"
+except:
+    print "DB found"
+conn.close()
 
 def crossdomain(origin=None, methods=None, headers=None, max_age=21600, attach_to_all=True, automatic_options=True):
     """ Function to enable crossdomain calls to the API """
@@ -49,6 +61,19 @@ def crossdomain(origin=None, methods=None, headers=None, max_age=21600, attach_t
 
 app = Flask(__name__)
 
+def new_entry(sensorID, sensorValue):
+    """ Function to create a new entry in logdata table. 
+    """
+    conn = sqlite3.connect('HCP_DB.db')
+    c = conn.cursor()
+    date = str(datetime.now())[0:16]
+    id = sensorID
+    value = sensorValue
+    entry = [id,value,date]
+    
+    c.execute("""INSERT INTO logdata (sensorId, SensorValue, date) VALUES(?,?,?)""", entry)
+    conn.commit()
+    conn.close()
 
 def return_empty():
     """ Function to return a empty JSON object.
@@ -59,6 +84,26 @@ def return_empty():
 
     return empty
     
+def log_value(sensorID, sensorValue):
+    """ Function to log a sensor value to database. """
+    new_entry(sensorID, sensorValue)
+
+def get_log_from_db():
+    """ Function to log a sensor value to database. """
+    entrys = []
+    conn = sqlite3.connect('HCP_DB.db')
+    c = conn.cursor()
+    c.execute("""SELECT * FROM logdata ORDER BY date desc""")
+    for entry in c.fetchall():
+        temp = {
+            'ID' : entry[0],
+            'sensorID' : entry[1],
+            'sensorValue' : entry[2],
+            'Date' : entry[3]
+        }
+        entrys.append(temp)
+    return entrys
+        
  
 """ This is the routing section of the API.
 The base URL is http://localhost:5000/
@@ -70,6 +115,23 @@ def get_return_empty():
     URL: http://localhost:5000/hcp/api/v1.0/empty/ 
     """
     return jsonify(return_empty())
+    
+@app.route('/hcp/api/v1.0/log/<int:sensorID>/<sensorValue>/', methods = ['GET'])
+@crossdomain(origin='*')
+def get_log_data(sensorID,sensorValue):
+    """ Route for return_empty()
+    URL: http://localhost:5000/hcp/api/v1.0/log/<int:sensorID>/<sensorValue>/
+    """
+    log_value(sensorID,sensorValue)
+    return jsonify({'Status':'Success'})
+
+@app.route('/hcp/api/v1.0/list/', methods = ['GET'])
+@crossdomain(origin='*')
+def get_log():
+    """ Route for get_log_from_db()
+    URL: http://localhost:5000/hcp/api/v1.0/list/ 
+    """
+    return jsonify({'Log' : get_log_from_db()})
     
 
 if __name__ == '__main__':
